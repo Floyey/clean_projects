@@ -7,17 +7,42 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 BASE_PATH="/d/projects"
-TEMP_FILE="/d/projects/bash/clean_projects/temp_projects.txt"
+TECH_DIRS=("bash" "docker" "html" "node" "php" "python")
 
-echo -e "${YELLOW}Searching for projects with 'vendor', 'node_modules', '__pycache__'...${NC}"
-DIRS=$(find "$BASE_PATH" -type d \( -name "vendor" -o -name "node_modules" -o -name "__pycache__" \) -print | grep -vE "/vendor/|/node_modules/|/__pycache__/" | sed 's|/[^/]*$||' | sort | uniq)
+DIRS_TO_DELETE=("vendor" "node_modules" "__pycache__")
+FILES_TO_DELETE=("*.pyc")
 
-echo -e "${YELLOW}Searching for projects with '.pyc' files...${NC}"
-PYC=$(find "$BASE_PATH" -type f -name "*.pyc" -print | grep -vE "/vendor/|/node_modules/|/__pycache__/" | sed 's|/[^/]*$||' | sort | uniq)
+TEMP_FILE="temp_projects.txt"
 
-PROJECTS=$(echo -e "$DIRS\n$PYC" | sort | uniq)
+echo -e "${YELLOW}Searching for directories and files to clean:${NC}"
+for DIR in "${DIRS_TO_DELETE[@]}"; do
+    echo -e "${GREEN}Directory: $DIR${NC}"
+done
+for FILE in "${FILES_TO_DELETE[@]}"; do
+    echo -e "${GREEN}File: $FILE${NC}"
+done
+echo -e "${YELLOW}\nStarting project cleanup...${NC}\n"
 
-PROJECTS_FILTERS=$(echo "$PROJECTS" | awk -F'/' '{OFS="/"; $NF=""; print $0}' | sort | uniq)
+EXCLUDE_PATTERN=$(printf "|/%s/" "${DIRS_TO_DELETE[@]}")
+EXCLUDE_PATTERN="${EXCLUDE_PATTERN:1}"
+
+FIND_ARGS=""
+for DIR in "${DIRS_TO_DELETE[@]}"; do
+    FIND_ARGS+=" -type d -name $DIR -o"
+done
+for FILE in "${FILES_TO_DELETE[@]}"; do
+    FIND_ARGS+=" -type f -name $FILE -o"
+done
+FIND_ARGS=${FIND_ARGS::-2}
+
+PROJECTS=""
+for TECH_DIR in "${TECH_DIRS[@]}"; do
+    while IFS= read -r line; do
+        PROJECT_PATH=$(echo "$line" | grep -oE "^$BASE_PATH/[^/]+/[^/]+")
+        PROJECTS+="$PROJECT_PATH\n"
+    done < <(find "$BASE_PATH/$TECH_DIR" \( $FIND_ARGS \) | grep -vE "$EXCLUDE_PATTERN")
+done
+PROJECTS_FILTERS=$(echo -e "$PROJECTS" | sort | uniq | awk NF)
 
 echo "$PROJECTS_FILTERS" > "$TEMP_FILE"
 
@@ -25,14 +50,13 @@ if [[ -z "$PROJECTS_FILTERS" ]]; then
     TOTAL=0
 else
     TOTAL=$(echo "$PROJECTS_FILTERS" | wc -l | tr -d ' ')
-    ((TOTAL--))
 fi
-CURRENT=0
 
 echo -e "${GREEN}Total projects to check: $TOTAL${NC}"
 
 exec 3< "$TEMP_FILE"
 
+CURRENT=0
 while IFS= read -r PROJECT_PATH <&3; do
     if [[ -z "$PROJECT_PATH" ]]; then
         continue
@@ -43,12 +67,22 @@ while IFS= read -r PROJECT_PATH <&3; do
 
     echo -e "[${YELLOW}$CURRENT/$TOTAL${NC}] Checking ${GREEN}$PROJECT_NAME${NC}"
 
-    read -p "Do you want to clean the project $PROJECT_PATH? [y/N] " response
-    if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]; then
-        echo -e "${RED}Cleaning $PROJECT_NAME...${NC}"
-        find "$PROJECT_PATH" \( -name "vendor" -o -name "node_modules" -o -name "__pycache__" \) -exec rm -rf {} +
-        find "$PROJECT_PATH" -type f -name "*.pyc" -delete
-    fi
+    while true; do
+        echo -ne "${YELLOW}Do you want to clean the project $PROJECT_PATH? [y/N] ${NC}"
+        read response
+        case $response in
+            [yY][eE][sS]|[Yy]* )
+                if ! find "$PROJECT_PATH" \( $FIND_ARGS \) -delete 2>/dev/null; then
+                    echo -e "${RED}Failed to clean $PROJECT_NAME. Check permissions or existence.${NC}"
+                fi
+                break;;
+            [nN][oO]|[Nn]* | "" )
+                echo -e "${RED}Skipping $PROJECT_NAME${NC}"
+                break;;
+            * )
+                echo -e "${RED}Please answer yes (y) or no (n).${NC}";;
+        esac
+    done
 
     PERCENTAGE=$((CURRENT * 100 / TOTAL))
     echo -e "${GREEN}Progress: $PERCENTAGE%${NC}"
