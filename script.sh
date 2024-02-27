@@ -1,22 +1,66 @@
 #!/bin/bash
 
+# Initialize variables
+BASE_PATH=""
+declare -a TECH_DIRS
+declare -a DIRS_TO_DELETE
+declare -a FILES_TO_DELETE
+TEMP_FILE="clean_projects.tmp"
+
 # ANSI color codes for colorful output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Base directory containing project folders
-BASE_PATH="/d/projects"
-# Directories to search within BASE_PATH
-TECH_DIRS=("bash" "docker" "html" "node" "php" "python")
+# Function to show usage
+usage() {
+    echo "Usage: $0 -b BASE_PATH [-t TECH_DIR]... [-d DIR_TO_DELETE]... [-f FILE_TO_DELETE]... [-temp TEMP_FILE]"
+    echo "  -b    Base path for projects (required)"
+    echo "  -t    Technology directory to include (optional, can be used multiple times)"
+    echo "  -d    Directory to delete (optional, can be used multiple times)"
+    echo "  -f    File pattern to delete (optional, can be used multiple times)"
+    echo "  -h, --help  Show this help message and exit"
+    echo "Note: At least one of -d or -f must be provided unless in help mode."
+    exit 1
+}
 
-# Directories and files targeted for deletion
-DIRS_TO_DELETE=("vendor" "node_modules" "__pycache__")
-FILES_TO_DELETE=("*.pyc")
+# Extended getopt command to include long options
+TEMP=`getopt -o b:t:d:f:h --long help -- "$@"`
+eval set -- "$TEMP"
 
-# Temporary file to store projects to be cleaned
-TEMP_FILE="temp_projects.txt"
+# Parse command line options
+while true; do
+    case "$1" in
+        -b )
+            BASE_PATH=$2; shift 2
+            ;;
+        -t )
+            TECH_DIRS+=("$2"); shift 2
+            ;;
+        -d )
+            DIRS_TO_DELETE+=("$2"); shift 2
+            ;;
+        -f )
+            FILES_TO_DELETE+=("$2"); shift 2
+            ;;
+        -h | --help )
+            usage; exit 1
+            ;;
+        -- )
+            shift; break
+            ;;
+        * )
+            break
+            ;;
+    esac
+done
+
+# Check for missing arguments
+if [ -z "$BASE_PATH" ] || { [ ${#DIRS_TO_DELETE[@]} -eq 0 ] && [ ${#FILES_TO_DELETE[@]} -eq 0 ]; }; then
+    echo -e "${RED}Error: Missing required arguments. BASE_PATH is required and at least one of DIR_TO_DELETE or FILE_TO_DELETE.${NC}"
+    usage
+fi
 
 # Display directories and files to be cleaned
 echo -e "${YELLOW}Searching for directories and files to clean:${NC}"
@@ -44,14 +88,22 @@ done
 # Remove trailing '-o'
 FIND_ARGS=${FIND_ARGS::-2}
 
-# Collect projects to clean
-PROJECTS=""
-for TECH_DIR in "${TECH_DIRS[@]}"; do
+# Adjusted search logic when TECH_DIRS is optional
+if [ ${#TECH_DIRS[@]} -eq 0 ]; then
+    # If no technology directories specified, search in the whole BASE_PATH
     while IFS= read -r line; do
         PROJECT_PATH=$(echo "$line" | grep -oE "^$BASE_PATH/[^/]+/[^/]+")
         PROJECTS+="$PROJECT_PATH\n"
-    done < <(find "$BASE_PATH/$TECH_DIR" \( $FIND_ARGS \) | grep -vE "$EXCLUDE_PATTERN")
-done
+    done < <(find "$BASE_PATH" \( $FIND_ARGS \) | grep -vE "$EXCLUDE_PATTERN")
+else
+    # Original logic for specified technology directories
+    for TECH_DIR in "${TECH_DIRS[@]}"; do
+        while IFS= read -r line; do
+            PROJECT_PATH=$(echo "$line" | grep -oE "^$BASE_PATH/[^/]+/[^/]+")
+            PROJECTS+="$PROJECT_PATH\n"
+        done < <(find "$BASE_PATH/$TECH_DIR" \( $FIND_ARGS \) | grep -vE "$EXCLUDE_PATTERN")
+    done
+fi
 PROJECTS_FILTERED=$(echo -e "$PROJECTS" | sort | uniq | awk NF)
 
 # Save filtered projects to a temporary file
