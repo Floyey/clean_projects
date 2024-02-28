@@ -141,7 +141,7 @@ while IFS= read -r PROJECT_PATH <&3; do
         case $response in
             [yY][eE][sS]|[Yy]* )
                 # Attempt to delete specified directories and files
-                if ! find "$PROJECT_PATH" \( $FIND_ARGS \) -delete 2>/dev/null; then
+                if ! find "$PROJECT_PATH" \( $FIND_ARGS \) -exec rm -rf {} + 2>/dev/null; then
                     echo -e "${RED}Failed to clean $PROJECT_NAME. Check permissions or existence.${NC}"
                 fi
                 break;;
