@@ -2,7 +2,6 @@
 
 # Initialize variables
 BASE_PATH=""
-declare -a TECH_DIRS
 declare -a DIRS_TO_DELETE
 declare -a FILES_TO_DELETE
 TEMP_FILE="clean_projects.tmp"
@@ -15,9 +14,8 @@ NC='\033[0m' # No Color
 
 # Function to show usage
 usage() {
-    echo "Usage: $0 -b BASE_PATH [-t TECH_DIR]... [-d DIR_TO_DELETE]... [-f FILE_TO_DELETE]... [-temp TEMP_FILE]"
+    echo "Usage: $0 -b BASE_PATH [-d DIR_TO_DELETE]... [-f FILE_TO_DELETE]..."
     echo "  -b    Base path for projects (required)"
-    echo "  -t    Technology directory to include (optional, can be used multiple times)"
     echo "  -d    Directory to delete (optional, can be used multiple times)"
     echo "  -f    File pattern to delete (optional, can be used multiple times)"
     echo "  -h, --help  Show this help message and exit"
@@ -34,9 +32,6 @@ while true; do
     case "$1" in
         -b )
             BASE_PATH=$2; shift 2
-            ;;
-        -t )
-            TECH_DIRS+=("$2"); shift 2
             ;;
         -d )
             DIRS_TO_DELETE+=("$2"); shift 2
@@ -88,22 +83,11 @@ done
 # Remove trailing '-o'
 FIND_ARGS=${FIND_ARGS::-2}
 
-# Adjusted search logic when TECH_DIRS is optional
-if [ ${#TECH_DIRS[@]} -eq 0 ]; then
-    # If no technology directories specified, search in the whole BASE_PATH
-    while IFS= read -r line; do
-        PROJECT_PATH=$(echo "$line" | grep -oE "^$BASE_PATH/[^/]+/[^/]+")
-        PROJECTS+="$PROJECT_PATH\n"
-    done < <(find "$BASE_PATH" \( $FIND_ARGS \) | grep -vE "$EXCLUDE_PATTERN")
-else
-    # Original logic for specified technology directories
-    for TECH_DIR in "${TECH_DIRS[@]}"; do
-        while IFS= read -r line; do
-            PROJECT_PATH=$(echo "$line" | grep -oE "^$BASE_PATH/[^/]+/[^/]+")
-            PROJECTS+="$PROJECT_PATH\n"
-        done < <(find "$BASE_PATH/$TECH_DIR" \( $FIND_ARGS \) | grep -vE "$EXCLUDE_PATTERN")
-    done
-fi
+# Collect projects to clean
+while IFS= read -r line; do
+    PROJECT_PATH=$(echo "$line" | grep -oE "^$BASE_PATH/[^/]+/[^/]+")
+    PROJECTS+="$PROJECT_PATH\n"
+done < <(find "$BASE_PATH" \( $FIND_ARGS \) | grep -vE "$EXCLUDE_PATTERN")
 PROJECTS_FILTERED=$(echo -e "$PROJECTS" | sort | uniq | awk NF)
 
 # Save filtered projects to a temporary file
