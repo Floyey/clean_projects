@@ -26,7 +26,7 @@ Example command:
 
 ## Demo
 
-![Script Demo](https://i.imgur.com/prJin1c.gifv)
+![Script Demo](https://i.imgur.com/prJin1c.gif)
 
 This GIF demonstrates the script in action, showing how it cleans up non-essential directories and files from projects automatically.
 
